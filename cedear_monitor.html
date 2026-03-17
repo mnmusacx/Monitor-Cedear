@@ -422,29 +422,26 @@ async function fetchCandles(sym){
 async function fetchAsym(sym){
   asymLoad.add(sym);
   try{
-    // Fire all 4 Finnhub calls in parallel — saves ~1.2s per symbol
-    const [tgR,erR,mtR,inR]=await Promise.all([
-      fetch(`${FH}/stock/price-target?symbol=${sym}&token=${KEY}`),
-      fetch(`${FH}/stock/earnings?symbol=${sym}&token=${KEY}`),
-      fetch(`${FH}/stock/metric?symbol=${sym}&metric=all&token=${KEY}`),
-      fetch(`${FH}/stock/insider-transactions?symbol=${sym}&token=${KEY}`)
-    ]);
     const a=asym[sym]||{};
+    // Call 1: price target
+    const tgR=await fetch(`${FH}/stock/price-target?symbol=${sym}&token=${KEY}`);
+    await delay(300);
+    // Call 2: earnings
+    const erR=await fetch(`${FH}/stock/earnings?symbol=${sym}&token=${KEY}`);
+    await delay(300);
+    // Call 3: metrics (PE, PEG, FCF, book value, 52w)
+    const mtR=await fetch(`${FH}/stock/metric?symbol=${sym}&metric=all&token=${KEY}`);
+
     if(tgR.ok){const d=await tgR.json();if(d.targetMean&&quotes[sym]?.price){a.targetUpside=(d.targetMean-quotes[sym].price)/quotes[sym].price*100;a.targetMean=d.targetMean;a.targetHigh=d.targetHigh;a.targetLow=d.targetLow;}}
     if(erR.ok){const d=await erR.json();if(Array.isArray(d)&&d.length){const last=d[0];if(last.actual!=null&&last.estimate!=null&&last.estimate!==0){a.epsSurprise=(last.actual-last.estimate)/Math.abs(last.estimate)*100;a.epsActual=last.actual;a.epsEstimate=last.estimate;a.epsPeriod=last.period;}}}
     if(mtR.ok){const d=await mtR.json();const m=d.metric||{};
-      if(m.peNormalizedAnnual&&m['revenueGrowthTTMYoy']){a.peg=m.peNormalizedAnnual/(m['revenueGrowthTTMYoy']*100);}
-      else if(m.pegAnnual){a.peg=m.pegAnnual;}
+      if(m.peNormalizedAnnual&&m['revenueGrowthTTMYoy']){a.peg=m.peNormalizedAnnual/(m['revenueGrowthTTMYoy']*100);}else if(m.pegAnnual){a.peg=m.pegAnnual;}
       if(m['52WeekHigh']&&m['52WeekLow']&&quotes[sym]?.price&&!a.w52hi){const hi=m['52WeekHigh'],lo=m['52WeekLow'],pr=quotes[sym].price;a.w52pos=(pr-lo)/(hi-lo)*100;a.w52hi=hi;a.w52lo=lo;}
       a.eps=a.eps||m.epsNormalizedAnnual||m.epsTTM||null;
       a.bookValue=m.bookValuePerShareAnnual||m.bookValuePerShareQuarterly||null;
       a.pe=m.peNormalizedAnnual||m.peTTM||null;
       a.peFwd=m.peForwardAnnual||null;
       if(m.freeCashFlowPerShareTTM&&quotes[sym]?.price){a.fcfYield=(m.freeCashFlowPerShareTTM/quotes[sym].price)*100;a.fcfPerShare=m.freeCashFlowPerShareTTM;}
-    }
-    if(inR.ok){const id=await inR.json();const cutoff=Date.now()-90*24*60*60*1000;let buyVal=0,buyCount=0;
-      (id.data||[]).forEach(t=>{const ts=new Date(t.transactionDate).getTime();if(ts>cutoff&&t.change>0&&t.transactionCode==='P'){buyVal+=t.value||0;buyCount++;}});
-      a.insiderBuyVal=buyVal;a.insiderBuyCount=buyCount;
     }
     asym[sym]=a;
   }catch(e){console.warn('Asym fetch failed',sym,e);}
@@ -481,11 +478,11 @@ async function fetchAll(){
   await refreshQuotes();
   const noInd=wl.filter(s=>!ind[s]);
   const noAsym=wl.filter(s=>!asym[s]);
-  // Run candles and asym in parallel with staggered starts
-  // Candles: 1 call/700ms — 50 tickers = ~35s
-  // Asym: starts 5s later, 1 call per 1.2s (4 Finnhub calls internally)
-  if(noInd.length) fetchQueue(noInd, fetchCandles, 700);
-  if(noAsym.length) setTimeout(()=>fetchQueue(noAsym, fetchAsym, 1200), 5000);
+  // Candles: 1 Yahoo call per symbol, 800ms gap
+  if(noInd.length) fetchQueue(noInd, fetchCandles, 800);
+  // Asym: 3 Finnhub calls per symbol, 2000ms gap = 1.5 calls/sec = 90/min → safe
+  // Starts immediately in parallel with candles
+  if(noAsym.length) fetchQueue(noAsym, fetchAsym, 2000);
 }
 
 // ── Tooltip ───────────────────────────────────────────────────────
