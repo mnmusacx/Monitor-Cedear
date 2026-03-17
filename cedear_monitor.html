@@ -112,7 +112,7 @@ td:last-child{border-right:none}
     <div><span class="lbl">CCL ARS/USD</span><span id="ccl-val">——————</span></div>
     <div><span class="lbl">STATUS</span><span id="status-txt">CONNECTING<span class="blink">_</span></span></div>
     <div><span class="lbl">LAST UPDATE</span><span id="last-upd">——:——:——</span></div>
-    <button class="btn" id="rbtn" onclick="refreshQuotes()">F5 REFRESH</button>
+    <button class="btn" id="rbtn" onclick="fetchAll()">F5 REFRESH</button>
   </div>
 </div>
 
@@ -221,19 +221,10 @@ function loadAll(){
   saveSt();
   renderTable();
   if(btn){btn.textContent='LOADING...';btn.disabled=true;}
-  // Load new quotes sequentially to avoid rate limit
   (async()=>{
-    const batches=chunks(toAdd,25);
-    for(let i=0;i<batches.length;i++){
-      await Promise.all(batches[i].map(s=>fetchQ(s)));
-      renderTable();
-      if(i<batches.length-1)await delay(1000);
-    }
     if(btn){btn.textContent='✓ ALL LOADED';btn.disabled=false;btn.style.color='var(--grn)';btn.style.borderColor='var(--grn)';}
-    // Queue candles + asym for new symbols
-    if(noInd.length)fetchQueue(noInd,fetchCandles,1100);
     const noAsym=toAdd.filter(s=>!asym[s]);
-    if(noAsym.length)fetchQueue(noAsym,fetchAsym,1100);
+    if(noAsym.length)fetchQueue(noAsym,fetchAsym,1500);
   })();
 }
 
@@ -383,7 +374,7 @@ async function fetchAsym(sym){
   asymLoad.add(sym);
   try{
     const a=asym[sym];
-    const pr=quotes[sym]?.price;
+    const pr=quotes[sym]?.price||null; // price optional, FCF/52w still work from metric data
 
     // Call 1: metrics (PEG, 52w, FCF, ROE, margins, revenue growth)
     const r1=await fetch(`${FH}/stock/metric?symbol=${sym}&metric=all&token=${KEY}`);
@@ -464,35 +455,15 @@ async function fetchAsym(sym){
   finally{asymLoad.delete(sym);renderTable();}
 }
 
-function chunks(arr,n){const r=[];for(let i=0;i<arr.length;i+=n)r.push(arr.slice(i,i+n));return r;}
-
-async function refreshQuotes(){
-  if(!wl.length)return;
-  const btn=document.getElementById('rbtn');
-  if(btn){btn.textContent='LOADING...';btn.disabled=true;}
-  const st=document.getElementById('status-txt');
-  if(st)st.innerHTML='UPDATING<span class="blink">_</span>';
-  try{
-    await fetchCCL();
-    // Up to 20 tickers in parallel — well under 60/min rate limit
-    const batches=chunks(wl,20);
-    for(const batch of batches){
-      await Promise.all(batch.map(s=>fetchQ(s)));
-      renderTable();
-      if(batches.length>1) await delay(1000);
-    }
-    const ts=new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    const el=document.getElementById('last-upd');if(el)el.textContent=ts+' ET';
-    if(st)st.innerHTML='<span style="color:var(--grn)">LIVE</span>';
-    hideErr();renderTable();
-  }catch(e){showErr('ERROR: '+e.message);}
-  finally{if(btn){btn.textContent='F5 REFRESH';btn.disabled=false;}}
-}
-
 async function fetchAll(){
-  await refreshQuotes();
+  // No quotes needed — start ASYM immediately
   const noAsym=wl.filter(s=>asym[s]===undefined);
   if(noAsym.length) fetchQueue(noAsym,fetchAsym,1500);
+  // Update status
+  const st=document.getElementById('status-txt');
+  if(st)st.innerHTML='<span style="color:var(--grn)">LIVE</span>';
+  const ts=new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const el=document.getElementById('last-upd');if(el)el.textContent=ts+' ET';
 }
 
 // ── Tooltip ───────────────────────────────────────────────────────
@@ -520,7 +491,7 @@ function showTT(sym,el){
   if(a?.targetMean)html+=`<div class="tt-row"><div class="tt-lbl">ANALYST TARGETS LO/MED/HI</div><span class="tt-val" style="color:var(--amb)">$${a.targetLow?.toFixed(0)} / $${a.targetMean?.toFixed(0)} / $${a.targetHigh?.toFixed(0)}</span></div>`;
   if(a?.epsPeriod)html+=`<div class="tt-row"><div class="tt-lbl">EPS PERIOD / ACT vs EST</div><span class="tt-val" style="color:var(--mut)">${a.epsPeriod} &nbsp; ${a.epsActual?.toFixed(2)} vs ${a.epsEstimate?.toFixed(2)}</span></div>`;
   if(a?.pe)html+=`<div class="tt-row"><div class="tt-lbl">P/E TRAILING</div><span class="tt-val" style="color:var(--amb)">${a.pe.toFixed(1)}x</span></div>`;
-  if(a?.fcfPerShare&&quotes[sym]?.price)html+=`<div class="tt-row"><div class="tt-lbl">FCF PER SHARE (TTM)</div><span class="tt-val" style="color:var(--amb)">$${a.fcfPerShare.toFixed(2)}</span></div>`;
+  if(a?.fcfPerShare)html+=`<div class="tt-row"><div class="tt-lbl">FCF PER SHARE (TTM)</div><span class="tt-val" style="color:var(--amb)">$${a.fcfPerShare.toFixed(2)}</span></div>`;
   if(a?.insiderBuyCount>0)html+=`<div class="tt-row"><div class="tt-lbl">INSIDER PURCHASES (90D)</div><span class="tt-val" style="color:var(--grn)">${a.insiderBuyCount} tx · $${a.insiderBuyVal>=1e6?(a.insiderBuyVal/1e6).toFixed(2)+'M':(a.insiderBuyVal/1e3).toFixed(0)+'K'}</span></div>`;
   if(a?.w52hi)html+=`<div class="tt-row"><div class="tt-lbl">52W RANGE LO — HI</div><span class="tt-val" style="color:var(--mut)">$${a.w52lo?.toFixed(2)} — $${a.w52hi?.toFixed(2)}</span></div>`;
   const fvd=computeFairValue(sym);
@@ -665,7 +636,7 @@ function setSort(key){
 }
 
 function sortVal(sym){
-  const q=quotes[sym],cd=CEDEARS[sym],a=asym[sym];
+  const cd=CEDEARS[sym],a=asym[sym];
   const sc=computeScore(sym);
   switch(sortKey){
     case'name':   return sym;
@@ -811,10 +782,9 @@ function addSym(sym){
   document.getElementById('new-sym').value='';
   if(!sym||wl.includes(sym))return;
   wl.push(sym);saveSt();renderTable();
-  fetchQ(sym).then(()=>{renderTable();fetchAsym(sym);});
-  fetchCandles(sym);
+  fetchAsym(sym);
 }
-function removeSym(sym){wl=wl.filter(s=>s!==sym);delete quotes[sym];delete asym[sym];saveSt();renderTable();}
+function removeSym(sym){wl=wl.filter(s=>s!==sym);delete asym[sym];saveSt();renderTable();}
 function showErr(m){const el=document.getElementById('err');if(el){el.textContent=m;el.style.display='block';}}
 function hideErr(){const el=document.getElementById('err');if(el)el.style.display='none';}
 
