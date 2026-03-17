@@ -91,7 +91,10 @@ td:last-child{border-right:none}
 @keyframes fl-dn{0%{background:#220000}100%{background:transparent}}
 .fl-up{animation:fl-up 1.2s ease forwards}
 .fl-dn{animation:fl-dn 1.2s ease forwards}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+@keyframes ld-pulse{0%,100%{opacity:.3}50%{opacity:1}}
+.ld-dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--mut);animation:ld-pulse .9s ease-in-out infinite;margin:0 1px;vertical-align:middle}
+.ld-dot:nth-child(2){animation-delay:.2s}
+.ld-dot:nth-child(3){animation-delay:.4s}
 .blink{animation:blink 1s step-end infinite}
 
 /* scrollbar */
@@ -589,16 +592,22 @@ function flagOf(sym){return FLAGS[sym]||'🌐';}
 
 function fU(n){if(n==null||isNaN(n))return'—';return'$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function fA(n){if(n==null||isNaN(n))return'—';return'$'+Math.round(n).toLocaleString('es-AR');}
-function na(txt){return`<span style="color:var(--mut);font-size:10px">${txt||'—'}</span>`;}
+const LOADING_HTML='<span style="display:inline-flex;align-items:center;justify-content:flex-end;width:100%"><span class="ld-dot"></span><span class="ld-dot"></span><span class="ld-dot"></span></span>';
+function na(txt){
+  // Called with no arg or '—' = no data (dash)
+  // Called with 'loading' = pulsing dots
+  if(txt==='loading') return LOADING_HTML;
+  return`<span style="color:var(--mut);font-size:11px">${txt||'—'}</span>`;
+}
 
 function peCell(v, loading){
-  if(loading) return na();
+  if(loading) return na('loading');
   if(v==null||isNaN(v)) return na('—');
   const col=v<15?'var(--grn)':v<25?'var(--amb)':v<40?'#cc6600':'var(--red)';
   return`<span style="color:${col};font-family:'Courier New',monospace;font-size:12px;font-weight:bold">${v.toFixed(1)}x</span>`;
 }
 function indCell(v, type, loading){
-  if(loading) return na();
+  if(loading) return na('loading');
   if(v==null) return na('—');
   if(type==='rsi'){
     const col=v>70?'var(--red)':v<30?'var(--grn)':'var(--amb)';
@@ -615,7 +624,7 @@ function indCell(v, type, loading){
 }
 function fvCell(sym){
   const a=asym[sym]; const aL=asymLoad.has(sym);
-  if(aL) return na();
+  if(aL) return na('loading');
   const fvd=computeFairValue(sym);
   if(!fvd) return na('—');
   const col=fvd.upside>20?'var(--grn)':fvd.upside>5?'#6db832':fvd.upside>-5?'var(--amb)':'var(--red)';
@@ -623,7 +632,7 @@ function fvCell(sym){
 }
 function scoreCell(sym){
   const loading=asymLoad.has(sym)||indLoad.has(sym);
-  if(loading)return na();
+  if(loading)return na('loading');
   const sc=computeScore(sym);
   if(!sc.signals.length)return na();
   if(sc.score===null)return`<span style="color:var(--mut);font-size:10px">FEW DATA</span>`;
@@ -723,8 +732,8 @@ function renderTable(){
       <td style="text-align:center;color:${rankCol};font-size:11px;font-weight:bold">${rank}</td>
       <td><div class="tk">${sym}</div><div class="nm">${cd?cd.n:sym}</div></td>
       <td style="text-align:center;font-size:18px;line-height:1">${flagOf(sym)}</td>
-      <td class="pr">${q?fU(q.price):na()}</td>
-      <td class="${up?'pu':'pd'}">${q?(up?'▲':'▼')+' '+Math.abs(q.pct).toFixed(2)+'%':na()}</td>
+      <td class="pr">${q?fU(q.price):na('loading')}</td>
+      <td class="${up?'pu':'pd'}">${q?(up?'▲':'▼')+' '+Math.abs(q.pct).toFixed(2)+'%':na('loading')}</td>
       <td class="cy">${ars?fA(ars):q?na(ccl?'—':'NO CCL'):na()}</td>
       <td style="text-align:right">${peCell(asym[sym]?.pe,aL)}</td>
       <td style="text-align:right">${peCell(asym[sym]?.peFwd,aL)}</td>
