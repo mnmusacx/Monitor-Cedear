@@ -456,14 +456,29 @@ async function fetchAsym(sym){
 }
 
 async function fetchAll(){
-  // No quotes needed — start ASYM immediately
-  const noAsym=wl.filter(s=>asym[s]===undefined);
-  if(noAsym.length) fetchQueue(noAsym,fetchAsym,1500);
-  // Update status
+  if(!wl.length) return;
+  const btn=document.getElementById('rbtn');
   const st=document.getElementById('status-txt');
-  if(st)st.innerHTML='<span style="color:var(--grn)">LIVE</span>';
-  const ts=new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  const el=document.getElementById('last-upd');if(el)el.textContent=ts+' ET';
+  if(btn){btn.textContent='LOADING...';btn.disabled=true;}
+  if(st)st.innerHTML='LOADING<span class="blink">_</span>';
+
+  // Fetch CCL for header display
+  await fetchCCL();
+
+  // Queue ASYM — this is the only data we need
+  const noAsym=wl.filter(s=>asym[s]===undefined);
+  if(noAsym.length){
+    // Run queue, then update status when done
+    fetchQueue(noAsym, fetchAsym, 1500).then(()=>{
+      if(st)st.innerHTML='<span style="color:var(--grn)">LIVE</span>';
+      const ts=new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      const el=document.getElementById('last-upd');if(el)el.textContent=ts+' ET';
+      if(btn){btn.textContent='F5 REFRESH';btn.disabled=false;}
+    });
+  } else {
+    if(st)st.innerHTML='<span style="color:var(--grn)">LIVE</span>';
+    if(btn){btn.textContent='F5 REFRESH';btn.disabled=false;}
+  }
 }
 
 // ── Tooltip ───────────────────────────────────────────────────────
@@ -804,8 +819,7 @@ loadSt();
 renderTable();
 fixStickyHeader();
 window.addEventListener('resize', fixStickyHeader);
-fetchAll();                          // startup: quotes + indicators + asym
-setInterval(refreshQuotes, 60000);  // every 60s: only prices + CCL
+fetchAll();
 </script>
 </body>
 </html>
