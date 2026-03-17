@@ -129,12 +129,11 @@ td:last-child{border-right:none}
 <div id="tbl-wrap">
   <table>
     <colgroup>
-      <col style="width:36px"><col style="width:150px"><col style="width:36px"><col style="width:100px"><col style="width:82px">
-      <col style="width:108px">
-      <col style="width:72px"><col style="width:72px">
-      <col style="width:105px">
-      <col style="width:88px"><col style="width:88px"><col style="width:88px"><col style="width:88px">
-      <col style="width:80px"><col style="width:30px">
+      <col style="width:36px"><col style="width:155px"><col style="width:36px"><col style="width:105px"><col style="width:85px">
+      <col style="width:115px">
+      <col style="width:70px"><col style="width:70px"><col style="width:100px">
+      <col style="width:90px"><col style="width:90px"><col style="width:90px"><col style="width:90px">
+      <col style="width:78px"><col style="width:30px">
     </colgroup>
     <thead>
       <tr>
@@ -592,35 +591,35 @@ function fU(n){if(n==null||isNaN(n))return'—';return'$'+n.toLocaleString('en-U
 function fA(n){if(n==null||isNaN(n))return'—';return'$'+Math.round(n).toLocaleString('es-AR');}
 function na(txt){return`<span style="color:var(--mut);font-size:10px">${txt||'—'}</span>`;}
 
-function fvCell(sym){
-  const fvd=computeFairValue(sym);
-  const aL=asymLoad.has(sym);
-  if(aL)return na();
-  if(!fvd)return na();
-  const up=fvd.upside>=0;
-  const col=fvd.upside>20?'var(--grn)':fvd.upside>5?'#6db832':fvd.upside>-5?'var(--amb)':'var(--red)';
-  return`<div style="text-align:right">
-    <span style="color:var(--wht);font-family:'Courier New',monospace;font-size:12px;font-weight:bold">$${fvd.fv.toFixed(2)}</span>
-    <div style="color:${col};font-size:10px;font-family:'Courier New',monospace;margin-top:1px">${up?'+':''}${fvd.upside.toFixed(1)}% vs price</div>
-  </div>`;
-}
-function peCell(v){
-  if(v==null||isNaN(v))return na();
+function peCell(v, loading){
+  if(loading) return na();
+  if(v==null||isNaN(v)) return na('—');
   const col=v<15?'var(--grn)':v<25?'var(--amb)':v<40?'#cc6600':'var(--red)';
   return`<span style="color:${col};font-family:'Courier New',monospace;font-size:12px;font-weight:bold">${v.toFixed(1)}x</span>`;
 }
-function rsiCell(v){
-  if(v==null)return na();
-  const col=v>70?'var(--red)':v<30?'var(--grn)':'var(--amb)';
-  const pct=Math.min(100,v);
-  return`<div style="text-align:right"><span class="iv" style="color:${col}">${v.toFixed(1)}</span><div class="tbar"><div class="tb" style="left:0;width:${pct}%;background:${col}"></div></div></div>`;
-}
-function centCell(v,mx,dec,sfx=''){
-  if(v==null)return na();
+function indCell(v, type, loading){
+  if(loading) return na();
+  if(v==null) return na('—');
+  if(type==='rsi'){
+    const col=v>70?'var(--red)':v<30?'var(--grn)':'var(--amb)';
+    const pct=Math.min(100,v);
+    return`<div style="text-align:right"><span class="iv" style="color:${col}">${v.toFixed(1)}</span><div class="tbar"><div class="tb" style="left:0;width:${pct}%;background:${col}"></div></div></div>`;
+  }
   const col=v>=0?'var(--grn)':'var(--red)';
+  const mx=type==='macd'?1:type==='sma'?30:15;
+  const dec=type==='macd'?3:2;
+  const sfx=type==='macd'?'':'%';
   const fw=Math.round(Math.min(1,Math.abs(v)/mx)*32);
   const lft=v>=0?32:32-fw;
   return`<div style="text-align:right"><span class="iv" style="color:${col}">${v>=0?'+':''}${v.toFixed(dec)}${sfx}</span><div class="tbar"><div class="tb" style="left:${lft}px;width:${fw}px;background:${col}"></div></div></div>`;
+}
+function fvCell(sym){
+  const a=asym[sym]; const aL=asymLoad.has(sym);
+  if(aL) return na();
+  const fvd=computeFairValue(sym);
+  if(!fvd) return na('—');
+  const col=fvd.upside>20?'var(--grn)':fvd.upside>5?'#6db832':fvd.upside>-5?'var(--amb)':'var(--red)';
+  return`<div style="text-align:right"><span style="color:var(--wht);font-family:'Courier New',monospace;font-size:12px;font-weight:bold">$${fvd.fv.toFixed(2)}</span><div style="color:${col};font-size:10px;font-family:'Courier New',monospace;margin-top:1px">${fvd.upside>=0?'+':''}${fvd.upside.toFixed(1)}%</div></div>`;
 }
 function scoreCell(sym){
   const loading=asymLoad.has(sym)||indLoad.has(sym);
@@ -727,13 +726,13 @@ function renderTable(){
       <td class="pr">${q?fU(q.price):na()}</td>
       <td class="${up?'pu':'pd'}">${q?(up?'▲':'▼')+' '+Math.abs(q.pct).toFixed(2)+'%':na()}</td>
       <td class="cy">${ars?fA(ars):q?na(ccl?'—':'NO CCL'):na()}</td>
-      <td style="text-align:right">${aL?na():peCell(asym[sym]?.pe)}</td>
-      <td style="text-align:right">${aL?na():peCell(asym[sym]?.peFwd)}</td>
+      <td style="text-align:right">${peCell(asym[sym]?.pe,aL)}</td>
+      <td style="text-align:right">${peCell(asym[sym]?.peFwd,aL)}</td>
       <td>${fvCell(sym)}</td>
-      <td>${iL?na():rsiCell(i?.rsi)}</td>
-      <td>${iL?na():centCell(i?.hist,1,3)}</td>
-      <td>${iL?na():centCell(i?.vsSMA,30,2,'%')}</td>
-      <td>${iL?na():centCell(i?.vsEMA,15,2,'%')}</td>
+      <td>${indCell(i?.rsi,'rsi',iL)}</td>
+      <td>${indCell(i?.hist,'macd',iL)}</td>
+      <td>${indCell(i?.vsSMA,'sma',iL)}</td>
+      <td>${indCell(i?.vsEMA,'ema',iL)}</td>
       <td style="text-align:center">${scoreCell(sym)}</td>
       <td style="text-align:center"><button class="del" onclick="removeSym('${sym}')">✕</button></td>
     </tr>`;
