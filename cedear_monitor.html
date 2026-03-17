@@ -396,28 +396,33 @@ async function fetchAsym(sym){
       a.peg=m.pegAnnual||null;
       a.eps=m.epsNormalizedAnnual||m.epsTTM||null;
       a.bookValue=m.bookValuePerShareAnnual||null;
-      if(m['52WeekHigh']&&m['52WeekLow']&&pr){
-        const hi=m['52WeekHigh'],lo=m['52WeekLow'];
-        a.w52hi=hi;a.w52lo=lo;a.w52pos=(pr-lo)/(hi-lo)*100;
-      }
-      if(m.freeCashFlowPerShareTTM&&pr){
-        a.fcfYield=(m.freeCashFlowPerShareTTM/pr)*100;
-        a.fcfPerShare=m.freeCashFlowPerShareTTM;
-      }
-      // New fields
-      if(m.roeTTM!=null)           a.roe=m.roeTTM*100;           // comes as decimal
-      if(m.grossMarginTTM!=null)   a.grossMargin=m.grossMarginTTM*100;
-      if(m.revenueGrowthTTMYoy!=null) a.revenueGrowth=m.revenueGrowthTTMYoy*100;
+      // Finnhub returns these already as percentages (e.g. 35.2 = 35.2%)
+      if(m.roeTTM!=null)              a.roe=m.roeTTM;
+      if(m.grossMarginTTM!=null)      a.grossMargin=m.grossMarginTTM*100; // this one is 0-1
+      if(m.revenueGrowthTTMYoy!=null) a.revenueGrowth=m.revenueGrowthTTMYoy*100; // 0-1
+      // Store 52w raw for position calc after we get price
+      if(m['52WeekHigh']&&m['52WeekLow']){a.w52hi=m['52WeekHigh'];a.w52lo=m['52WeekLow'];}
+      if(m.freeCashFlowPerShareTTM)   a.fcfPerShare=m.freeCashFlowPerShareTTM;
     }
     if(r2.ok){
       const d=await r2.json();
-      if(d.targetMean&&pr){
-        a.targetMean=d.targetMean;
-        a.targetHigh=d.targetHigh;
-        a.targetLow=d.targetLow;
-        a.targetUpside=(d.targetMean-pr)/pr*100;
-      }
+      if(d.targetMean) a.targetMean=d.targetMean;
     }
+
+    // Fetch current price — needed for target upside, 52w position, FCF yield
+    try{
+      const rp=await fetch(`${FH}/quote?symbol=${sym}&token=${KEY}`);
+      if(rp.ok){
+        const dp=await rp.json();
+        if(dp.c){
+          const pr=dp.c;
+          a.price=pr;
+          if(a.targetMean) a.targetUpside=(a.targetMean-pr)/pr*100;
+          if(a.w52hi&&a.w52lo) a.w52pos=(pr-a.w52lo)/(a.w52hi-a.w52lo)*100;
+          if(a.fcfPerShare)    a.fcfYield=(a.fcfPerShare/pr)*100;
+        }
+      }
+    }catch{}
     if(r3.ok){
       const d=await r3.json();
       if(Array.isArray(d)&&d.length){
